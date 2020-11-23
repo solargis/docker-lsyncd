@@ -1,0 +1,5 @@
+.*
+!/.*ignore
+/target*
+/source*
+/keys

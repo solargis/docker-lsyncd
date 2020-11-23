@@ -1,0 +1,2 @@
+FROM linuxserver/openssh-server
+RUN apk --no-cache add rsync

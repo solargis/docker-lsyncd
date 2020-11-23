@@ -1,0 +1,76 @@
+version: '3.3'
+# https://hub.docker.com/r/linuxserver/openssh-server
+# https://hub.docker.com/r/allthings/lsyncd
+
+x-env:
+  ssh-server: &ssh-server-env
+    - PUID
+    - PGID
+    - TZ
+    - PUBLIC_KEY
+    - USER_NAME
+  lsyncd: &lsyncd-env
+    TARGET_USER: ${USER_NAME}
+    TARGET_HOST: lsync-target
+    TARGET_SSH_PORT: 2222
+    TARGET_PATH: /var/data
+    SSH_KEY_FILE: /run/secreat/client_key
+    HOST_KEY:
+    INOTIFY_MODE:
+    SYNC_DELAY:
+services:
+  source-a:
+    container_name: lsync-a
+    hostname: lsync-a
+    image: solargis/lsyncd
+    volumes:
+      - ./source-a:/var/source:ro
+      - ./keys/client_id_rsa:/run/secreat/client_key:ro
+    environment: *lsyncd-env
+  source-b:
+    container_name: lsync-b
+    hostname: lsync-b
+    image: solargis/lsyncd
+    build:
+      context: .
+      dockerfile: Dockerfile.lsyncd
+    volumes:
+      - ./source-b:/var/source:ro
+      - ./keys/client_id_rsa:/run/secreat/client_key:ro
+    environment: *lsyncd-env
+
+  target:
+    container_name: lsync-target
+    hostname: lsync-target
+    image: solargis/openssh-server
+    build:
+      context: .
+      dockerfile: Dockerfile.openssh-server
+    volumes:
+      - ./target:/var/data
+      - ./keys:/config/ssh_host_keys:ro
+    environment: *ssh-server-env
+    ports:
+      - 222:2222
+
+  backup:
+    container_name: lsync-backup
+    hostname: lsync-backup
+    image: solargis/lsyncd
+    volumes:
+      - ./target:/var/source:ro
+      - ./keys/client_id_rsa:/run/secreat/client_key:ro
+    environment:
+      <<: *lsyncd-env
+      TARGET_HOST: lsync-replica
+      DELETE: 'true'
+
+
+  replica:
+    container_name: lsync-replica
+    hostname: lsync-replica
+    image: solargis/openssh-server
+    volumes:
+      - ./target-replica:/var/data
+      - ./keys:/config/ssh_host_keys:ro
+    environment: *ssh-server-env

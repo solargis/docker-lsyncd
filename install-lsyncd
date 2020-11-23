@@ -1,0 +1,160 @@
+#!/bin/bash
+
+error() { echo "ERROR:" "$@" >&2; }
+fail() { [ $# -gt 0 ] && error "$@"; exit 1; }
+
+bash_version() { bash --version | perl -ne '/(\d+\.\d+\.\d+)/ && print $1'; }
+bash_version | awk -F. '$1<3||$2<1{exit(1)}' || fail "This script requires mininal bash version 3.1 ($(bash_version))"
+
+load_identity() { if [ "$1" = "-" ]; then cat; else cat "$1"; fi; }
+lc() { echo "$1" | perl -ne 'print lc'; }
+is_in() { local i= a="$1"; shift; for i; do [ "$a" = "$i" ] && return 0; done; return 1; }
+in_path() { echo "$PATH" | awk -F: -v d="$(dirname "$1")" '{for(i=1;i<=NF;i++)if(d==$i){c=1;break}}END{exit!c}'; }
+is_int() { echo "$1" | awk '$0+0!=$0{exit(1)}'; }
+debug() { echo '#' "$@" >&2; "$@"; }
+help() {
+    in_path "$0" && APP="$(basename "$0")" || APP="$0"
+    echo
+    echo "Usage: $APP [OPTIONS] [[user@]host[:port][:/tar/path]]"
+    echo
+    echo "Starts docker container 'solargis/lsyncd' using lsyncd to waching changes in local"
+    echo "directory and syncing files via ssh to remote server."
+    echo
+    echo "Options:"
+    echo "-h, --host <host>          - target hostname (required)"
+    echo "-i, --identity <path>      - private ssh key for authorization on target host (required)"
+    echo "-u, --user <user>          - username at target host (default 'lsync')"
+    echo "-p, --port <port>          - ssh port to target host (default 22)"
+    echo "-d, --delay <seconds>      - delay to start syncing after detected change (default 0)"
+    echo "-D, --delete <true|false|startup|running>"
+    echo "                           - syncing deleted files  (default 'running')"
+    echo "-c, --compress             - turn on compression during tranfer files (optional)"
+    echo "-n, --no-archive           - disable archive mode of rsync (default is archive mode enabled)"
+    echo "-e, --excludes <list>      - rsync patterns to exclude files from transfer (default '*~')"
+    echo "-m, --mode mode            - Specifies on inotify systems what kind of changes to listen to"
+    echo "                             Can be 'modify|m', 'close-write|cw' (default) or 'both'"
+    echo "-t, --trg, --target <path> - target path on target host (default /var/data)"
+    echo "-s, --src, --source <path> - source path for syncing (default actual dir)"
+    echo "    --container            - customized docker container (default 'lsyncd')"
+    echo "-?, --help                 - print this help and exit"
+    echo
+    exit
+}
+validate_bool() {
+    is_in "$(lc "$1")" yes y true t ano a 1 && echo "true" || \
+    is_in "$(lc "$1")" no n false f nie 0 && echo "false" || \
+    [ $# -gt 1 ] && fail "Argument '$1' of option $2 is not valid boolean." || \
+    return 1
+}
+validate_delete() {
+    validate_bool "$1" || is_in "$1" startup running && echo "$1" || \
+    fail "Invalid argument '$1' of option $2 (allowd values are: true|false|startup|running)"
+}
+
+TARGET_USER=lsync
+TARGET_HOST=
+TARGET_SSH_PORT=
+TARGET_PATH=/var/data
+SOURCE_PATH="$(realpath .)"
+SSH_KEY=
+HOST_KEY=
+INOTIFY_MODE=
+DELETE=
+SYNC_DELAY=
+RSYNC_ARCHIVE=
+RSYNC_COMPRESS=
+CONTAINER=
+EXCLUDES=()
+arg=
+
+validate_mode() {
+    if   is_in "$(lc "$1")" closewrite close-write cw
+    then set-once INOTIFY_MODE "CloseWrite" --mode
+    elif is_in "$(lc "$1")" modify mod m
+    then set-once INOTIFY_MODE "Modify" --mode
+    elif is_in "$(lc "$1")" close-write,modify modify,close-write cw,m cwm m,cw mcw all both
+    then set-once INOTIFY_MODE "CloseWrite or Modify" --mode
+    else fail "Invalid argument '$1' of option $2 (allowd values are: CloseWrite|cw|Modify|m|all)"
+    fi
+}
+set-once() {
+    [ -z "$2" ] && return
+    [ "${!1}" != "$4" ] && fail "Multiple value of $3: '${!1}', '$2'"
+    printf -v "$1" '%s' "$2"
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+    -?=*|--*=*)         aux=$1; shift; set -- "${aux%%=*}" "${aux#*=}" "$@"; continue;;
+    -u|--user*)         set-once TARGET_USER "$2" "$1" lsync; shift;;
+    -h|--host*)         set-once TARGET_HOST "$2" "$1"; shift;;
+    -p|--port)          set-once TARGET_SSH_PORT "$2" "$1"; shift;;
+    -d|--delay)         set-once SYNC_DELAY "$2" "$1"; shift;;
+    -m|--mode)          validate_mode "$2" "$1"; shift;;
+    -D|--delete)        set-once DELETE "$(validate_delete "$2" "$1")" "$1"; shift;;
+    -c|--compress)      set-once RSYNC_COMPRESS true "$1" false;;
+    -n|--no-archive)    set-once RSYNC_ARCHIVE false "$1" false;;
+    -e|--excludes)      shift; EXCLUDES=( "${EXCLUDES[@]}" "$1" );;
+    --container)        set-once CONTAINER "$2" "$1"; shift;;
+    -t|--trg|--target)  set-once TARGET_PATH "$2" "$1" /var/data; shift;;
+    -s|--src|--source)  set-once SOURCE_PATH "$(realpath "$2")" "$1" "$(realpath .)"; shift;;
+    -i|--identity)      aux="$(load_identity "$2")" || fail; set-once SSH_KEY "$aux" "$1"; shift;;
+    '-?'|--help)        help;;
+    -?|--*)             fail "Unknown option '$1'";;
+    -??*)               aux="$1"; shift; set -- "${aux::2}" "${aux:2}" "$@"; continue;;
+    *)
+        arg="$1"
+        if [ "${arg/*@/}" != "$arg" ]; then set-once TARGET_USER "${arg/@*/}" --user lsync; arg="${arg/*@/}"; fi
+        set-once TARGET_HOST "${arg%%:*}" --host;
+        if [ "${arg#*:}" != "$arg" ]; then
+            arg="${arg#*:}"
+            if is_int "${arg%%:*}"; then set-once TARGET_SSH_PORT "${arg%%:*}" --port
+            [ "${arg#*:}" != "$arg" ] && set-once TARGET_PATH "${arg#*:}" --target /var/data
+            else set-once TARGET_PATH "$arg" --target /var/data; fi
+        fi
+    esac; shift
+done
+
+EXCLUDES="$(printf "%s\n"  "${EXCLUDES[@]}")"
+ensure() { [ -z "${!1}" ] && fail "$2"; }
+
+ensure TARGET_HOST "Missing target host! (hint: add option --host)"
+if [ -z "$SSH_KEY" ] && [ -f ~/.ssh/id_rsa ]; then SSH_KEY="$(load_identity ~/.ssh/id_rsa)" || fail; fi
+
+for e in TARGET_USER TARGET_HOST TARGET_SSH_PORT TARGET_PATH \
+SSH_KEY EXCLUDES RSYNC_COMPRESS SYNC_DELAY DELETE INOTIFY_MODE RSYNC_ARCHIVE
+do [ -z "${!e}" ] || set -- "$@" --env "$e=${!e}"; done
+
+for d in $(awk '$1=="search"{print$2}' /etc/resolv.conf)
+do set -- "$@" --dns-search "$d"; done
+
+TEMP="$(mktemp -t lsyncd-known_hosts)"
+trap "{ rm -f '$TEMP'; }" EXIT
+
+[ "$(docker run --rm "$@" \
+    -v "$TEMP:/root/.ssh/known_hosts" \
+    solargis/lsyncd echo ok)" != "ok" ] && fail "Unable to connect."
+
+HOST_KEY="$(awk '{print $2" "$3}' "$TEMP")"
+rm "$TEMP" && trap - EXIT
+[ -z "$CONTAINER" ] && CONTAINER="lsyncd"
+STATUS="$(docker ps -a | awk -v a="$CONTAINER" 'NR==1||$NF==a')"
+
+if [ "$(echo "$STATUS" | wc -l)" -gt 1 ]; then
+    echo "$STATUS"
+    echo "Container '$CONTAINER' aleady exists"
+    read -p "Cancel [C], Replace [r], Rename [n]> "
+    case "$(lc "$REPLY")" in
+    c) exit;;
+    r) docker rm -f "$CONTAINER" >/dev/null || fail;;
+    n) echo "INFO: $([ "$CONTAINER" == "lsyncd" ] && echo "Add" || "Change value of") option --container"; exit;;
+    *) echo "INFO: Warning input '$REPLY', exiting."; exit 1;;
+    esac
+fi
+
+exec docker run -d "$@" \
+    --env "HOST_KEY=$HOST_KEY" \
+    --hostname "$CONTAINER" --name "$CONTAINER" \
+    -v "$SOURCE_PATH:/var/source" \
+    --restart always solargis/lsyncd
+
