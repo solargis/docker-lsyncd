@@ -70,7 +70,7 @@ Configuration consist of two steps:
 | HOST_KEY       | string  |               | optional, ecdsa-sha2 public key of remote host (used in `known_hosts`)
 
 
-### Easy setup lsynd by script `install-lsyncd`
+## Easy setup lsynd by script `install-lsyncd`
 
 This script allows easy to setup client service running from docker.\
 Just go to dicrectory wich sould be synchronized and launch command:
@@ -78,6 +78,11 @@ Just go to dicrectory wich sould be synchronized and launch command:
 install-lsyncd user@host:port:/target/dir -i /path/to/id_rsa --dellay=2
 ```
 
+### Install script install-lsyncd
+```
+LASTEST="$(curl -sI https://github.com/solargis/docker-lsyncd/releases/latest | perl -ne '/^Location: .*\/releases\/tag\/(\S+)/i && print $1')";
+sudo curl -Ls https://github.com/solargis/docker-lsyncd/releases/download/$LASTEST/install-lsyncd -o /usr/local/bin/install-lsyncd && sudo chmod +x /usr/local/bin/install-lsyncd
+```
 
 ## Test/example guide
 For testing use `./demo.sh` which prepares environment and start docker-compose.\
