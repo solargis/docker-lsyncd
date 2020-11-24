@@ -36,6 +36,8 @@ help() {
     echo "-t, --trg, --target <path> - target path on target host (default /var/data)"
     echo "-s, --src, --source <path> - source path for syncing (default actual dir)"
     echo "    --container            - customized docker container (default 'lsyncd')"
+    echo "-r, --restart <policy>     - customized docker restart policy (default 'always')"
+    echo "                             Posible values: 'no', 'on-failure', 'always' or 'unless-stopped'"
     echo "-?, --help                 - print this help and exit"
     echo
     exit
@@ -65,6 +67,7 @@ RSYNC_ARCHIVE=
 RSYNC_COMPRESS=
 CONTAINER=
 EXCLUDES=()
+restart=
 arg=
 
 validate_mode() {
@@ -93,6 +96,7 @@ while [ "$#" -gt 0 ]; do
     -m|--mode)          validate_mode "$2" "$1"; shift;;
     -D|--delete)        set-once DELETE "$(validate_delete "$2" "$1")" "$1"; shift;;
     -c|--compress)      set-once RSYNC_COMPRESS true "$1" false;;
+    -r|--restart)       set-once restart "$2" "$1"; shift;;
     -n|--no-archive)    set-once RSYNC_ARCHIVE false "$1" false;;
     -e|--excludes)      shift; EXCLUDES=( "${EXCLUDES[@]}" "$1" );;
     --container)        set-once CONTAINER "$2" "$1"; shift;;
@@ -158,5 +162,5 @@ exec docker run -d "$@" \
     --env "HOST_KEY=$HOST_KEY" \
     --hostname "$CONTAINER" --name "$CONTAINER" \
     -v "$SOURCE_PATH:/var/source" \
-    --restart always solargis/lsyncd
+    --restart "${restart:-always}" solargis/lsyncd
 
