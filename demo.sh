@@ -16,7 +16,7 @@ setup)
     done
 
     [ -f keys/client_id_rsa ] && [ -f keys/client_id_rsa.pub ] || \
-        ssh-keygen -b 1024 -t rsa -f keys/client_id_rsa -N '' -C 'lsyncd-client' | anot 'user-keys> '
+        ssh-keygen -b "${KEYSIZE:-1024}" -t rsa -f keys/client_id_rsa -N '' -C 'lsyncd-client' | anot 'user-keys> '
     if ! [ -f keys/ssh_host_ecdsa_key.pub ]; then
         echo -e "\x1b[1mGenerating host keys for openssh-server ...\x1b[0m"
         # start docker solargis/openssh-server just for create keys
