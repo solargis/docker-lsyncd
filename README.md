@@ -75,7 +75,7 @@ Configuration consist of two steps:
 This script allows easy to setup client service running from docker.\
 Just go to dicrectory wich sould be synchronized and launch command:
 ```sh
-install-lsyncd user@host:port:/target/dir -i /path/to/id_rsa --dellay=2
+install-lsyncd user@host:port:/target/dir -i /path/to/id_rsa --delay=2
 ```
 
 ### Install script install-lsyncd
