@@ -128,15 +128,17 @@ do [ -z "${!e}" ] || set -- "$@" --env "$e=${!e}"; done
 for d in $(awk '$1=="search"{print$2}' /etc/resolv.conf)
 do set -- "$@" --dns-search "$d"; done
 
-TEMP="$(mktemp -t lsyncd-known_hosts)"
-trap "{ rm -f '$TEMP'; }" EXIT
+TEMP="$(mktemp -t lsyncd-known_hosts-XXXX)"
+[ -z "$TEMP" ] && ! [ -f "$TEMP" ] && fail "Unable to create tempfile $TEMP"
+echo "INFO: Created tempfile=$TEMP"
+trap "{ rm -f '$TEMP' && echo 'INFO: Removed tempfile=$TEMP'; }" EXIT
 
 [ "$(docker run --rm "$@" \
     -v "$TEMP:/root/.ssh/known_hosts" \
     solargis/lsyncd echo ok)" != "ok" ] && fail "Unable to connect."
 
 HOST_KEY="$(awk '{print $2" "$3}' "$TEMP")"
-rm "$TEMP" && trap - EXIT
+rm "$TEMP" && trap - EXIT && echo "INFO: Removed tempfile=$TEMP"
 [ -z "$CONTAINER" ] && CONTAINER="lsyncd"
 STATUS="$(docker ps -a | awk -v a="$CONTAINER" 'NR==1||$NF==a')"
 
