@@ -33,10 +33,11 @@ help() {
     echo "-e, --excludes <list>      - rsync patterns to exclude files from transfer (default '*~')"
     echo "-m, --mode mode            - Specifies on inotify systems what kind of changes to listen to"
     echo "                             Can be 'modify|m', 'close-write|cw' (default) or 'both'"
-    echo "-t, --trg, --target <path> - target path on target host (default /var/data)"
+    echo "-t, --trg, --target <path> - target path on target host (default ./)"
     echo "-s, --src, --source <path> - source path for syncing (default actual dir)"
     echo "    --container            - customized docker container (default 'lsyncd')"
-    echo "-r, --restart <policy>     - customized docker restart policy (default 'always')"
+    echo "    --network              - customized docker network"
+    echo "-r, --restart <policy>     - customized docker restart policy (default 'unless-stopped')"
     echo "                             Posible values: 'no', 'on-failure', 'always' or 'unless-stopped'"
     echo "-?, --help                 - print this help and exit"
     echo
@@ -53,22 +54,12 @@ validate_delete() {
     fail "Invalid argument '$1' of option $2 (allowd values are: true|false|startup|running)"
 }
 
-TARGET_USER=lsync
-TARGET_HOST=
-TARGET_SSH_PORT=
-TARGET_PATH=/var/data
-SOURCE_PATH="$(realpath .)"
-SSH_KEY=
-HOST_KEY=
-INOTIFY_MODE=
-DELETE=
-SYNC_DELAY=
-RSYNC_ARCHIVE=
-RSYNC_COMPRESS=
-CONTAINER=
-EXCLUDES=()
-restart=
-arg=
+TARGET_USER=lsync           TARGET_HOST=            TARGET_SSH_PORT=
+TARGET_PATH=./              SSH_KEY=                SOURCE_PATH=
+HOST_KEY=                   INOTIFY_MODE=           DELETE=
+SYNC_DELAY=                 RSYNC_ARCHIVE=          RSYNC_COMPRESS=
+CONTAINER=                  EXCLUDES=()
+restart=                    arg=                    network=()
 
 validate_mode() {
     if   is_in "$(lc "$1")" closewrite close-write cw
@@ -100,8 +91,9 @@ while [ "$#" -gt 0 ]; do
     -n|--no-archive)    set-once RSYNC_ARCHIVE false "$1" false;;
     -e|--excludes)      shift; EXCLUDES=( "${EXCLUDES[@]}" "$1" );;
     --container)        set-once CONTAINER "$2" "$1"; shift;;
-    -t|--trg|--target)  set-once TARGET_PATH "$2" "$1" /var/data; shift;;
-    -s|--src|--source)  set-once SOURCE_PATH "$(realpath "$2")" "$1" "$(realpath .)"; shift;;
+    --network)          network=( "${network[@]}" "$2" ); shift;;
+    -t|--trg|--target)  set-once TARGET_PATH "$2" "$1" ./; shift;;
+    -s|--src|--source)  set-once SOURCE_PATH "$(realpath "$2")" "$1"; shift;;
     -i|--identity)      aux="$(load_identity "$2")" || fail; set-once SSH_KEY "$aux" "$1"; shift;;
     '-?'|--help)        help;;
     -?|--*)             fail "Unknown option '$1'";;
@@ -113,8 +105,8 @@ while [ "$#" -gt 0 ]; do
         if [ "${arg#*:}" != "$arg" ]; then
             arg="${arg#*:}"
             if is_int "${arg%%:*}"; then set-once TARGET_SSH_PORT "${arg%%:*}" --port
-            [ "${arg#*:}" != "$arg" ] && set-once TARGET_PATH "${arg#*:}" --target /var/data
-            else set-once TARGET_PATH "$arg" --target /var/data; fi
+            [ "${arg#*:}" != "$arg" ] && set-once TARGET_PATH "${arg#*:}" --target ./
+            else set-once TARGET_PATH "$arg" --target ./; fi
         fi
     esac; shift
 done
@@ -129,20 +121,19 @@ for e in TARGET_USER TARGET_HOST TARGET_SSH_PORT TARGET_PATH \
 SSH_KEY EXCLUDES RSYNC_COMPRESS SYNC_DELAY DELETE INOTIFY_MODE RSYNC_ARCHIVE
 do [ -z "${!e}" ] || set -- "$@" --env "$e=${!e}"; done
 
-for d in $(awk '$1=="search"{print$2}' /etc/resolv.conf)
-do set -- "$@" --dns-search "$d"; done
+for n in "${network[@]}"; do set -- "$@" --network="$n"; done
+for d in $(awk '$1=="search"{print$2}' /etc/resolv.conf); do set -- "$@" --dns-search "$d"; done
 
 TEMP="$(mktemp -t lsyncd-known_hosts-XXXX)"
 [ -z "$TEMP" ] && ! [ -f "$TEMP" ] && fail "Unable to create tempfile $TEMP"
-echo "INFO: Created tempfile=$TEMP"
 trap "{ rm -f '$TEMP' && echo 'INFO: Removed tempfile=$TEMP'; }" EXIT
 
-if ! docker run --rm "$@" -v "$TEMP:/root/.ssh/known_hosts" solargis/lsyncd true; then
-    rm "$TEMP" && trap - EXIT && echo "INFO: Removed tempfile=$TEMP"
-    fail "Unable to connect."
+if ! docker run --rm "$@" -v "$TEMP:/root/.ssh/known_hosts" solargis/lsyncd ssh "$TARGET_HOST'" true; then
+    rm "$TEMP" && trap - EXIT
+    error "Unable to connect."
     echo "Do you want inspect command 'ssh $TARGET_HOST' inside container?"
     read -p "[yN]> "
-    [ "$(lc "$REPLY")" = y ] && debug docker run --rm "$@" -it solargis/lsyncd bash
+    [ "$(lc "$REPLY")" = y ] && debug docker run --rm "$@" -it solargis/lsyncd bash -l
     exit 1
 fi
 
@@ -166,6 +157,6 @@ fi
 exec docker run -d "$@" \
     --env "HOST_KEY=$HOST_KEY" \
     --hostname "$CONTAINER" --name "$CONTAINER" \
-    -v "$SOURCE_PATH:/var/source" \
-    --restart "${restart:-always}" solargis/lsyncd
+    -v "${SOURCE_PATH:-$(realpath .)}:/var/source" \
+    --restart "${restart:-unless-stopped}" solargis/lsyncd
 

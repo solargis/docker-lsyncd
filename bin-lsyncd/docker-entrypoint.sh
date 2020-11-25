@@ -24,8 +24,9 @@ Host $TARGET_HOST
      IdentityFile $SSH_KEY_FILE
      CheckHostIP no
 EOF
+AK=
 if [ -z "$HOST_KEY" ]; then
-    [ "$(ssh "$TARGET_HOST" -o StrictHostKeyChecking=accept-new echo ok)" = "ok" ] || exit 1
+    ssh "$TARGET_HOST" -o StrictHostKeyChecking=accept-new true 2>/dev/null >&2 || AK=1
 else
     cat >> ~/.ssh/known_hosts <<<"$(
         [ "${TARGET_SSH_PORT:-22}" -eq 22 ] && echo "$TARGET_HOST" || echo "[$TARGET_HOST]:$TARGET_SSH_PORT"
@@ -33,9 +34,7 @@ else
         echo $HOST_KEY | awk '{print $1" "$2}'
     )"
 fi
-[ "$1" == "bash" ] && echo "ssh $TARGET_HOST" >> ~/.bash_history
-[ "$1" == "sh" ] && echo "ssh $TARGET_HOST" >> ~/.ash_history
-
+echo "ssh $TARGET_HOST${AK:+ -o StrictHostKeyChecking=accept-new}" >> ~/.bash_history
 
 echo "${EXCLUDES:-"*~"}" > ~/lsyncd.excludes
 cat > ~/lsyncd.conf.lua <<EOF
@@ -61,7 +60,9 @@ sync {
 }
 EOF
 
-[ "$1" == "bash" ] && echo "lsyncd $HOME/lsyncd.conf.lua" >> ~/.bash_history
-[ "$1" == "sh" ] && echo "lsyncd $HOME/lsyncd.conf.lua" >> ~/.ash_history
+tee -a ~/.ash_history ~/.bash_history >/dev/null <<EOF
+lsyncd $HOME/lsyncd.conf.lua
+ssh $TARGET_HOST${AK:+ -o StrictHostKeyChecking=accept-new}
+EOF
 
 exec "$@"

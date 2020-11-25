@@ -23,9 +23,12 @@ setup)
         docker run --rm -e PUID="$(id -u)" -e PGID="$(id -g)" \
             -v "$PWD"/keys:/config/ssh_host_keys solargis/openssh-server true | anot 'host-keys> '
     fi
+    grep -F 'cat keys/client_id_rsa.pub' keys/authorized_keys \
+        || echo "command=\"ssh-entrypoint.sh \\\"\${SSH_ORIGINAL_COMMAND:-bash -l}\\\"\" $(cat keys/client_id_rsa.pub)" > keys/authorized_keys
+        # || echo "command=\"cd /data; \${SSH_ORIGINAL_COMMAND:-bash -l}\" $(cat keys/client_id_rsa.pub)" > keys/authorized_keys
+    chmod 0600 keys/authorized_keys
 
     [ -f .env ] || touch .env
-    dotenv-set PUBLIC_KEY "$(cat keys/client_id_rsa.pub)"
     dotenv-set PUID "$(id -u)"
     dotenv-set PGID "$(id -g)"
     dotenv-has USER_NAME || dotenv-set USER_NAME "lsyncd"
@@ -34,9 +37,9 @@ setup)
     [ "${OSTYPE::6}" == darwin ] && dotenv-set INOTIFY_MODE "CloseWrite or Modify"
     dotenv-set HOST_KEY "$(cat keys/ssh_host_ecdsa_key.pub)"
     ;;
-start)   "$0" setup && docker-compose up -d;;
+start)   "$0" setup && docker-compose up --build -d;;
 watch)   "$0" start && watch -n 1 ls -lA source-a source-b target target-replica;;
 stop)    docker-compose down;;
 cleanup) "$0" stop && rm -fr keys source-a source-b target target-replica;;
-*)       echo "Usage $0 [setup|start|watch|stop|destroy]";;
+*)       echo "Usage $0 [setup|start|watch|stop|cleanup]";;
 esac

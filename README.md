@@ -3,6 +3,7 @@
 This is one way syncing solution so we need source and destination implementation.
 * **[solargis/lsyncd](https://hub.docker.com/r/solargis/lsyncd)** - docker image for source, with `lsync`,`ssh-client`,`rsync`
 * **[solargis/openssh-server](https://hub.docker.com/r/solargis/openssh-server)** - docker image fror target, based on [linuxserver/openssh-server](https://github.com/linuxserver/docker-openssh-server) with added `rsync`
+Booth images aditionaly contains packages `net-tools`, `tree`, `vim` for easer debuging during trouble shooting. Because services need to be high available.
 
 
 ## solargis/openssh-server
