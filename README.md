@@ -3,11 +3,25 @@
 This is one way syncing solution so we need source and destination implementation.
 * **[solargis/lsyncd](https://hub.docker.com/r/solargis/lsyncd)** - docker image for source, with `lsync`,`ssh-client`,`rsync`
 * **[solargis/openssh-server](https://hub.docker.com/r/solargis/openssh-server)** - docker image fror target, based on [linuxserver/openssh-server](https://github.com/linuxserver/docker-openssh-server) with added `rsync`
+
 Booth images aditionaly contains packages `net-tools`, `tree`, `vim` for easer debuging during trouble shooting. Because services need to be high available.
 
-
 ## solargis/openssh-server
-Deas not need own documentation use great documentation of [linuxserver/openssh-server](https://hub.docker.com/r/linuxserver/openssh-server).
+See documentation of base image [linuxserver/openssh-server](https://hub.docker.com/r/linuxserver/openssh-server).\
+Plus you can:
+
+* Instead of using enviroment properties `PUBLIC_KEY` and `PUBLIC_KEY_FILE` use rather `AUTHORIZED_KEYS` and `AUTHORIZED_KEYS_FILE`.\
+  This properties correctly merge multiple keys (seppareted by new line) to *authorized_keys*.\
+  Plus *authorized_key* can be updated without reboot by command:
+  ```bash
+  docker exec $container merge-audthorized_keys
+  ```
+
+* You can use `ssh-entrypoint.sh` as command for authorized keys which set default working directory to `/data` for all ssh connections (works also with `lsync`, `scp`, etc.).\
+  Usage:
+  ```bash
+  -e AUTHORIZED_KEYS='command="ssh-entrypoint.sh \"${SSH_ORIGINAL_COMMAND:-bash -l}\"" ssh-rsa AAAAXY...Z== comment'
+  ```
 
 
 ## solargis/lsyncd

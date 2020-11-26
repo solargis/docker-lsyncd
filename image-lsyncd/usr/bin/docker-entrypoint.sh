@@ -12,7 +12,7 @@ if isset SSH_KEY 2>/dev/null; then
     isset SSH_KEY_FILE 2>/dev/null && fail "Environment variables SSH_KEY and SSH_KEY_FILE are mutually exclusive."
     export SSH_KEY_FILE=~/.ssh/id_rsa
     echo "$SSH_KEY" > "$SSH_KEY_FILE"
-    chmod 0400 "$SSH_KEY_FILE"
+    chmod 0600 "$SSH_KEY_FILE"
 fi
 
 isset TARGET_USER TARGET_HOST TARGET_PATH SSH_KEY_FILE || fail
@@ -26,7 +26,9 @@ Host $TARGET_HOST
 EOF
 AK=
 if [ -z "$HOST_KEY" ]; then
-    ssh "$TARGET_HOST" -o StrictHostKeyChecking=accept-new true 2>/dev/null >&2 || AK=1
+    ssh "$TARGET_HOST" -o StrictHostKeyChecking=accept-new true 2>/dev/null >&2 \
+    || grep -F "$TARGET_HOST" ~/.ssh/known_hosts \
+    || AK=1
 else
     cat >> ~/.ssh/known_hosts <<<"$(
         [ "${TARGET_SSH_PORT:-22}" -eq 22 ] && echo "$TARGET_HOST" || echo "[$TARGET_HOST]:$TARGET_SSH_PORT"

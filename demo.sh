@@ -31,15 +31,17 @@ setup)
     [ -f .env ] || touch .env
     dotenv-set PUID "$(id -u)"
     dotenv-set PGID "$(id -g)"
-    dotenv-has USER_NAME || dotenv-set USER_NAME "lsyncd"
+    dotenv-has USER_NAME || dotenv-set USER_NAME "lsync"
     dotenv-has TZ || dotenv-set TZ "Europe/Bratislava"
     dotenv-has SYNC_DELAY || dotenv-set SYNC_DELAY "1"
     [ "${OSTYPE::6}" == darwin ] && dotenv-set INOTIFY_MODE "CloseWrite or Modify"
     dotenv-set HOST_KEY "$(cat keys/ssh_host_ecdsa_key.pub)"
     ;;
-start)   "$0" setup && docker-compose up --build -d;;
-watch)   "$0" start && watch -n 1 ls -lA source-a source-b target target-replica;;
+start)   "$0" setup && docker-compose build && docker-compose up -d;;
+watch)   ( [ "$2" = "just" ] || "$0" start ) && watch -n 1 bash -c "'# containers and bind folers
+            docker-compose ps;
+            ls -lA source-a source-b target target-replica'";;
 stop)    docker-compose down;;
 cleanup) "$0" stop && rm -fr keys source-a source-b target target-replica;;
-*)       echo "Usage $0 [setup|start|watch|stop|cleanup]";;
+*)       echo "Usage $0 [setup|start|watch [just]|stop|cleanup]";;
 esac

@@ -117,6 +117,8 @@ ensure() { [ -z "${!1}" ] && fail "$2"; }
 ensure TARGET_HOST "Missing target host! (hint: add option --host)"
 if [ -z "$SSH_KEY" ] && [ -f ~/.ssh/id_rsa ]; then SSH_KEY="$(load_identity ~/.ssh/id_rsa)" || fail; fi
 
+[ -z "$INOTIFY_MODE" ] && [ "${OSTYPE::6}" == darwin ] && INOTIFY_MODE="CloseWrite or Modify"
+
 for e in TARGET_USER TARGET_HOST TARGET_SSH_PORT TARGET_PATH \
 SSH_KEY EXCLUDES RSYNC_COMPRESS SYNC_DELAY DELETE INOTIFY_MODE RSYNC_ARCHIVE
 do [ -z "${!e}" ] || set -- "$@" --env "$e=${!e}"; done
@@ -128,7 +130,7 @@ TEMP="$(mktemp -t lsyncd-known_hosts-XXXX)"
 [ -z "$TEMP" ] && ! [ -f "$TEMP" ] && fail "Unable to create tempfile $TEMP"
 trap "{ rm -f '$TEMP' && echo 'INFO: Removed tempfile=$TEMP'; }" EXIT
 
-if ! docker run --rm "$@" -v "$TEMP:/root/.ssh/known_hosts" solargis/lsyncd ssh "$TARGET_HOST'" true; then
+if ! docker run --rm "$@" -v "$TEMP:/root/.ssh/known_hosts" solargis/lsyncd ssh "$TARGET_HOST" true; then
     rm "$TEMP" && trap - EXIT
     error "Unable to connect."
     echo "Do you want inspect command 'ssh $TARGET_HOST' inside container?"

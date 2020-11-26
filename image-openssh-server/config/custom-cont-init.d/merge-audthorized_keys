@@ -1,0 +1,49 @@
+#!/bin/bash
+#/config/custom-cont-init.d/populate-authorized-keys.sh
+v=1
+label="$(basename $BASH_SOURCE)"
+
+dbg() { [ "$v" -ge 3 ] && echo -e "[$label] \e[33mDEBUG: Cmd{$#}:" "$@" '\e[0m' >&2; "$@"; }
+logi() { echo "[$label] INFO:" "$@"; }
+logw() { echo "[$label] WARNING:" "$@"; }
+# $1 - key which can contains command and/or note
+extract_pure_key() { echo "$1" | awk '{ i=1; while(i < NF && $i !~ /^ssh-/ && $i !~ /^ecdsh-/) i++; print $i" "$(i+1) }'; }
+# $1 - key type, $2 - public key value
+key_fingerprint() { ssh-keygen -lf <(echo "$@") | awk '{print $2}'; }
+# $1 - searching file, $2 - key type, $3 - public key value
+contains_key() { ! awk -v type="$2" -v key="$3" '{ i=0; while(++i < NF) if($i == type && $(i+1) == key) exit(1) }' "$1"; }
+# $1 - searching file, $2 - key type, $3 - public key value
+key_line() { ! awk -v type="$2" -v key="$3" '{ i=0; while(++i < NF) if($i == type && $(i+1) == key) { print FNR; exit(0); }}' "$1"; }
+# $1 - file, $2 - line number, $3 - new line
+replace_line() { sed -i "$2"'s/.*/'"$(echo "$3" | sed 's/[\\\/&]/\\&/g')"'/' "$1"; }
+# $1 - file, $2 - line number
+get_line() { awk "NR == $2" "$1"; }
+# stdin - list of keys, $1 - target file
+import_keys() {
+    while read -r; do
+        [ "${#REPLY}" -gt 0 ] && [ "${REPLY::1}" != "#" ] && [ "${REPLY// /}" != "" ] || continue
+        KEY=( $(dbg extract_pure_key "$REPLY") )
+        [[ "${#KEY[@]}" -ne 2 ]] && logw "Skipping unrecognized public key: $REPLY" && continue
+        if dbg contains_key "$1" "${KEY[@]}"; then
+            LINE="$(dbg key_line "$1" "${KEY[@]}")"
+            echo ---BEGIN---: "$1"
+            printf "%s\n" "$REPLY"
+            echo ---
+            echo "$REPLY"
+            echo ---
+            if [[ "$(dbg get_line "$1" "$LINE")" = "$REPLY" ]]
+            then logi "Public key $(dbg key_fingerprint "${KEY[@]}") is present"
+            else dbg replace_line "$1" "$LINE" "$REPLY" && logi "Public key $(dbg key_fingerprint "${KEY[@]}") updated"
+            fi
+        else
+            echo "$REPLY" >> "$1" && logi "Public key $(dbg key_fingerprint "${KEY[@]}") added"
+        fi
+    done
+}
+
+[ -z "$AUTHORIZED_KEYS" ] \
+    || echo "$AUTHORIZED_KEYS" | dbg import_keys /config/.ssh/authorized_keys
+
+[ -z "$AUTHORIZED_KEYS_FILE" ] \
+    || [ -r "$AUTHORIZED_KEYS_FILE" ] \
+    && cat "$AUTHORIZED_KEYS_FILE" | dbg import_keys /config/.ssh/authorized_keys

@@ -8,7 +8,7 @@ x-env:
     - PGID
     - TZ
     - USER_NAME
-#    - PUBLIC_KEY_FILE=/config/ssh_host_keys/authorized_keys
+    - AUTHORIZED_KEYS_FILE=/config/ssh_host_keys/authorized_keys
   lsyncd: &lsyncd-env
     TARGET_USER: ${USER_NAME}
     TARGET_HOST: lsync-target
@@ -24,6 +24,9 @@ services:
     container_name: lsync-a
     hostname: lsync-a
     restart: unless-stopped
+    build:
+      context: .
+      dockerfile: Dockerfile.lsyncd
     volumes:
       - ./source-a:/var/source:ro
       - ./keys/client_id_rsa:/run/secreat/client_key:ro
@@ -33,9 +36,6 @@ services:
     container_name: lsync-b
     hostname: lsync-b
     restart: unless-stopped
-    build:
-      context: .
-      dockerfile: Dockerfile.lsyncd
     volumes:
       - ./source-b:/var/source:ro
       - ./keys/client_id_rsa:/run/secreat/client_key:ro
@@ -52,8 +52,9 @@ services:
     volumes:
       - ./target:/data
       - ./keys:/config/ssh_host_keys:ro
-      - ./keys/authorized_keys:/config/.ssh/authorized_keys:ro
-      - ./bin-openssh-server/ssh-entrypoint.sh:/usr/bin/ssh-entrypoint.sh:ro
+      #- ./keys/authorized_keys:/config/.ssh/authorized_keys:ro #(works depending on permission mapping)
+      #- ./image-openssh-server/usr/bin/ssh-entrypoint.sh:/usr/bin/ssh-entrypoint.sh:ro #(for debuging)
+      - ./image-openssh-server/config/custom-cont-init.d/merge-audthorized_keys:/config/custom-cont-init.d/merge-audthorized_keys:ro #(for debuging)
     environment: *ssh-server-env
     ports:
       - 222:2222
@@ -80,5 +81,4 @@ services:
     volumes:
       - ./target-replica:/data
       - ./keys:/config/ssh_host_keys:ro
-      - ./keys/authorized_keys:/config/.ssh/authorized_keys:ro
     environment: *ssh-server-env
