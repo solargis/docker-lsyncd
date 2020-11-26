@@ -6,6 +6,10 @@ modmkdir() { local MOD="$1"; shift; mkdir "$@" && chmod "$MOD" "$@"; }
 isset() { local i; for i; do [ -z "${!i}" ] && error "Missine environment variable $i." && return 1; done; return 0; }
 fixTrailingSlash() { [ "${1:${#1}-1}" = "/" ] && echo "${1::-1}" || echo "$1"; }
 boolanOrString() { [ "$1" != "true" ] && [ "$1" != "false" ] && echo '"'"$1"'"' || echo "$1"; }
+append-if-missing() {
+    local C="$(cat)";
+    [ -w "$1" ] && ! awk -v c="$(echo "$C" | head -1)" '$0==c{exit(1)}' "$1" || echo "$C" >> "$1";
+}
 
 [ -d ~/.ssh ] || modmkdir 0700 ~/.ssh
 if isset SSH_KEY 2>/dev/null; then
@@ -17,26 +21,25 @@ fi
 
 isset TARGET_USER TARGET_HOST TARGET_PATH SSH_KEY_FILE || fail
 
-cat >> ~/.ssh/config <<EOF
+append-if-missing ~/.ssh/config <<EOF
 Host $TARGET_HOST
      User $TARGET_USER${TARGET_SSH_PORT:+
      Port $TARGET_SSH_PORT}
      IdentityFile $SSH_KEY_FILE
      CheckHostIP no
 EOF
+
+[ "${TARGET_SSH_PORT:-22}" -eq 22 ] \
+    && HOST_KEY_PREFIX="$TARGET_HOST" \
+    || HOST_KEY_PREFIX="[$TARGET_HOST]:$TARGET_SSH_PORT"
+
 AK=
-if [ -z "$HOST_KEY" ]; then
-    ssh "$TARGET_HOST" -o StrictHostKeyChecking=accept-new true 2>/dev/null >&2 \
-    || grep -F "$TARGET_HOST" ~/.ssh/known_hosts \
+if [ -z "$HOST_KEY" ]
+then ! awk -v k="$HOST_KEY_PREFIX" '$1==k{exit(1)}' \
+    || ssh "$TARGET_HOST" -o StrictHostKeyChecking=accept-new true 2>/dev/null >&2 \
     || AK=1
-else
-    cat >> ~/.ssh/known_hosts <<<"$(
-        [ "${TARGET_SSH_PORT:-22}" -eq 22 ] && echo "$TARGET_HOST" || echo "[$TARGET_HOST]:$TARGET_SSH_PORT"
-    ) $(
-        echo $HOST_KEY | awk '{print $1" "$2}'
-    )"
+else append-if-missing ~/.ssh/known_hosts <<<"$HOST_KEY_PREFIX $(echo $HOST_KEY | awk '{print $1" "$2}')"
 fi
-echo "ssh $TARGET_HOST${AK:+ -o StrictHostKeyChecking=accept-new}" >> ~/.bash_history
 
 echo "${EXCLUDES:-"*~"}" > ~/lsyncd.excludes
 cat > ~/lsyncd.conf.lua <<EOF
@@ -62,9 +65,10 @@ sync {
 }
 EOF
 
-tee -a ~/.ash_history ~/.bash_history >/dev/null <<EOF
-lsyncd $HOME/lsyncd.conf.lua
-ssh $TARGET_HOST${AK:+ -o StrictHostKeyChecking=accept-new}
-EOF
+for f in ~/.ash_history ~/.bash_history; do
+    append-if-missing "$f" <<<"lsyncd $HOME/lsyncd.conf.lua"
+    append-if-missing "$f" <<<"ssh $TARGET_HOST"
+    [ -z "$AK"] || append-if-missing "$f" <<<"ssh $TARGET_HOST -o StrictHostKeyChecking=accept-new"
+done
 
 exec "$@"

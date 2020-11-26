@@ -14,7 +14,7 @@ x-env:
     TARGET_HOST: lsync-target
     TARGET_SSH_PORT: 2222
     TARGET_PATH: /data
-    SSH_KEY_FILE: /run/secreat/client_key
+    SSH_KEY_FILE: /run/secret/client_key
     HOST_KEY:
     INOTIFY_MODE:
     SYNC_DELAY:
@@ -29,7 +29,7 @@ services:
       dockerfile: Dockerfile.lsyncd
     volumes:
       - ./source-a:/var/source:ro
-      - ./keys/client_id_rsa:/run/secreat/client_key:ro
+      - ./keys/client_id_rsa:/run/secret/client_key:ro
     environment: *lsyncd-env
   lsync-b:
     image: solargis/lsyncd
@@ -38,7 +38,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./source-b:/var/source:ro
-      - ./keys/client_id_rsa:/run/secreat/client_key:ro
+      - ./keys/client_id_rsa:/run/secret/client_key:ro
     environment: *lsyncd-env
 
   lsync-target:
@@ -54,7 +54,7 @@ services:
       - ./keys:/config/ssh_host_keys:ro
       #- ./keys/authorized_keys:/config/.ssh/authorized_keys:ro #(works depending on permission mapping)
       #- ./image-openssh-server/usr/bin/ssh-entrypoint.sh:/usr/bin/ssh-entrypoint.sh:ro #(for debuging)
-      - ./image-openssh-server/config/custom-cont-init.d/merge-audthorized_keys:/config/custom-cont-init.d/merge-audthorized_keys:ro #(for debuging)
+      #- ./image-openssh-server/config/custom-cont-init.d/merge-audthorized_keys:/config/custom-cont-init.d/merge-audthorized_keys:ro #(for debuging)
     environment: *ssh-server-env
     ports:
       - 222:2222
@@ -66,7 +66,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./target:/var/source:ro
-      - ./keys/client_id_rsa:/run/secreat/client_key:ro
+      - ./keys/client_id_rsa:/run/secret/client_key:ro
     environment:
       <<: *lsyncd-env
       TARGET_HOST: lsync-replica
