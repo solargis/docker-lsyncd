@@ -110,3 +110,8 @@ Usage:
 * **`./demo.sh watch`** - call `./demo.sh start` and then start watching source and target directories
 * **`./demo.sh stop`** - destory containers by `docker-compose down`
 * **`./demo.sh cleanup`** - call `./demo.sh stop` and then remove keys, source and target directories
+
+**Note:**\
+Sometimes, after fresh creation of bind directories, the changes are not reflected inside conainer .\
+If synchronization not works, you can quickly chcek if local files match containers files by executing: `./demo.sh check`.\
+If not, then you simply creacreate containers by `./demo.sh stop && ./demo.sh stop`.

@@ -8,12 +8,14 @@ dotenv-set() {
     fi
 }
 anot() { PREFIX="$1" perl -pe '$_="\x1b[2m$ENV{PREFIX}\x1b[0m$_"'; }
+error() { echo -e "\x1b[31mError:\x1b[0m" "$@" >&2; }
+dr() { tr -d '\r'; }
+
+FOLDERS=( keys: source-a:lsync-a source-b:lsync-b target:lsync-backup target-replica: )
 
 case "$1" in
 setup)
-    for d in keys source-a source-b target target-replica
-    do [ -d "$d" ] || mkdir "$d" || exit
-    done
+    for d in "${FOLDERS[@]}"; do [ -d "${d%%:*}" ] || mkdir "${d%%:*}" || exit; done
 
     [ -f keys/client_id_rsa ] && [ -f keys/client_id_rsa.pub ] || \
         ssh-keygen -b "${KEYSIZE:-1024}" -t rsa -f keys/client_id_rsa -N '' -C 'lsyncd-client' | anot 'user-keys> '
@@ -37,11 +39,20 @@ setup)
     [ "${OSTYPE::6}" == darwin ] && dotenv-set INOTIFY_MODE "CloseWrite or Modify"
     dotenv-set HOST_KEY "$(cat keys/ssh_host_ecdsa_key.pub)"
     ;;
-start)   "$0" setup && docker-compose build && docker-compose up -d;;
+check|check-binding)
+    for d in "${FOLDERS[@]}"; do
+        if ! [ -z "${d#*:}" ]; then
+            echo -e "\x1b[1m${d#*:}\x1b[0m"
+            printf "\x1b[2m%10s:\x1b[0m %s\n" "${d%%:*}" "$(ls -1A "${d%%:*}" | tr '\n' ' ')"
+            printf "\x1b[2m%10s:\x1b[0m %s\n" "container" "$(docker-compose exec "${d#*:}" ls -1A /var/source | dr | tr '\n' ' ')"
+        fi
+    done
+    ;;
+start)   "$0" setup && docker-compose build && docker-compose up -d || exit;;
 watch)   ( [ "$2" = "just" ] || "$0" start ) && watch -n 1 bash -c "'# containers and bind folers
             docker-compose ps;
             ls -lA source-a source-b target target-replica'";;
 stop)    docker-compose down;;
 cleanup) "$0" stop && rm -fr keys source-a source-b target target-replica;;
-*)       echo "Usage $0 [setup|start|watch [just]|stop|cleanup]";;
+*)       echo "Usage $0 [setup|start|watch [just]|check-binding|stop|cleanup]";;
 esac

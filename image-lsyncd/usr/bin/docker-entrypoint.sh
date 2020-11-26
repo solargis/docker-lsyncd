@@ -68,7 +68,7 @@ EOF
 for f in ~/.ash_history ~/.bash_history; do
     append-if-missing "$f" <<<"lsyncd $HOME/lsyncd.conf.lua"
     append-if-missing "$f" <<<"ssh $TARGET_HOST"
-    [ -z "$AK"] || append-if-missing "$f" <<<"ssh $TARGET_HOST -o StrictHostKeyChecking=accept-new"
+    [ -z "$AK" ] || append-if-missing "$f" <<<"ssh $TARGET_HOST -o StrictHostKeyChecking=accept-new"
 done
 
 exec "$@"
