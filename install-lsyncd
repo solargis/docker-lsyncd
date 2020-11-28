@@ -141,7 +141,7 @@ if ! docker run --rm "$@" -v "$TEMP:/root/.ssh/known_hosts" solargis/lsyncd ssh 
 fi
 
 HOST_KEY="$(awk '{print $2" "$3}' "$TEMP")"
-rm "$TEMP" && trap - EXIT && echo "INFO: Removed tempfile=$TEMP"
+rm "$TEMP" && trap - EXIT
 [ -z "$CONTAINER" ] && CONTAINER="lsyncd"
 STATUS="$(docker ps -a | awk -v a="$CONTAINER" 'NR==1||$NF==a')"
 
