@@ -130,6 +130,7 @@ TEMP="$(mktemp -t lsyncd-known_hosts-XXXX)"
 [ -z "$TEMP" ] && ! [ -f "$TEMP" ] && fail "Unable to create tempfile $TEMP"
 trap "{ rm -f '$TEMP' && echo 'INFO: Removed tempfile=$TEMP'; }" EXIT
 
+docker pull solargis/lsyncd
 if ! docker run --rm "$@" -v "$TEMP:/root/.ssh/known_hosts" solargis/lsyncd ssh "$TARGET_HOST" true; then
     rm "$TEMP" && trap - EXIT
     error "Unable to connect."
