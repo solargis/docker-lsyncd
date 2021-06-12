@@ -1,5 +1,5 @@
 FROM alpine:3.9
-RUN apk --no-cache add lsyncd openssh-client rsync bash tree vim
+RUN apk --no-cache add lsyncd openssh-client rsync bash tree vim tzdata
 COPY image-lsyncd/ /
 ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["lsyncd", "/root/lsyncd.conf.lua"]
