@@ -35,7 +35,7 @@ EOF
 
 AK=
 if [ -z "$HOST_KEY" ]
-then ! awk -v k="$HOST_KEY_PREFIX" '$1==k{exit(1)}' \
+then [ "$(awk -v k="$HOST_KEY_PREFIX" '$1==k{print k}' ~/.ssh/known_hosts 2>/dev/null)" == "$HOST_KEY_PREFIX" ]  \
     || ssh "$TARGET_HOST" -o StrictHostKeyChecking=accept-new true 2>/dev/null >&2 \
     || AK=1
 else append-if-missing ~/.ssh/known_hosts <<<"$HOST_KEY_PREFIX $(echo $HOST_KEY | awk '{print $1" "$2}')"
